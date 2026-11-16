@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from src.db.connection import get_connection
+from src.rules import minimum_recharge
 
 MIN_SUSPENSION_DAYS = 5   # a suspension must last at least this many days
 DAYS_IN_MONTH = 30        # used to work out the daily burn rate (DBR)
@@ -71,6 +72,7 @@ def request_suspension(subscriber_id, reason, start_date, end_date, db_path=None
                 "reason": "insufficient_balance",
                 "daily_burn_rate": round(daily_burn_rate, 2),
                 "balance": row["balance"],
+                "minimum_recharge": minimum_recharge(daily_burn_rate - row["balance"]),
             }
 
         # Rule 6: only one suspension request at a time.
@@ -127,8 +129,13 @@ def get_suspension_requests(subscriber_id, db_path=None):
         conn.close()
 
 
-def resume_connection(subscriber_id, db_path=None):
-    """Resume a suspended connection, but only if the balance covers the monthly charge."""
+def resume_connection(subscriber_id, box_is_on, db_path=None):
+    """
+    Resume a suspended connection.
+
+    box_is_on: True if the customer says the set-top box is switched on.
+    The balance only needs to cover ONE day of burn rate, not the full monthly charge.
+    """
     subscriber_id = str(subscriber_id)
     conn = get_connection(db_path)
     try:
@@ -141,11 +148,20 @@ def resume_connection(subscriber_id, db_path=None):
             return {"ok": False, "reason": "unknown_subscriber"}
         if row["status"] != "suspended":
             return {"ok": False, "reason": "not_suspended"}
-        if row["balance"] < row["monthly_charge"]:
+
+        # The set-top box must be on, so it can receive the signal after resuming.
+        if not box_is_on:
+            return {"ok": False, "reason": "set_top_box_must_be_on"}
+
+        # The balance must cover at least one day of burn rate.
+        daily_burn_rate = row["monthly_charge"] / DAYS_IN_MONTH
+        if row["balance"] < daily_burn_rate:
             return {
                 "ok": False,
                 "reason": "insufficient_balance",
-                "shortfall": row["monthly_charge"] - row["balance"],
+                "daily_burn_rate": round(daily_burn_rate, 2),
+                "balance": row["balance"],
+                "minimum_recharge": minimum_recharge(daily_burn_rate - row["balance"]),
             }
 
         conn.execute(

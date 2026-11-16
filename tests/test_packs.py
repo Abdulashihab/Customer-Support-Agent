@@ -43,6 +43,7 @@ def test_add_pack_to_suspended_connection(db_copy):
 
 def test_add_pack_needs_enough_balance(db_copy):
     # 100013 has balance 300 and pays 153. Adding a 219 pack needs 372, so 72 is missing.
+    # The minimum recharge is 200, so the customer must recharge at least 200.
     result = add_pack("100013", "DSK-TMK1", db_path=db_copy)
     assert result == {
         "ok": False,
@@ -50,6 +51,7 @@ def test_add_pack_needs_enough_balance(db_copy):
         "required": 372,
         "balance": 300,
         "shortfall": 72,
+        "minimum_recharge": 200,
     }
 
 

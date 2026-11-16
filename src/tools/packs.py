@@ -1,5 +1,5 @@
 from src.db.connection import get_connection
-
+from src.rules import minimum_recharge
 BASE_PACK = "DSK-BASIC"   # every connection must keep this pack
 
 
@@ -56,12 +56,14 @@ def add_pack(subscriber_id, pack_id, db_path=None):
         # The balance must cover the NEW monthly charge.
         required = connection["monthly_charge"] + pack["price"]
         if connection["balance"] < required:
+            shortfall = required - connection["balance"]
             return {
                 "ok": False,
                 "reason": "insufficient_balance",
                 "required": required,
                 "balance": connection["balance"],
-                "shortfall": required - connection["balance"],
+                "shortfall": shortfall,
+                "minimum_recharge": minimum_recharge(shortfall)
             }
 
         # Which channels of the new pack does the customer already get? (check BEFORE adding)

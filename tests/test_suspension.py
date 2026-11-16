@@ -76,6 +76,7 @@ def test_balance_must_cover_one_day_burn_rate(db_copy):
     assert result["ok"] is False
     assert result["reason"] == "insufficient_balance"
     assert result["daily_burn_rate"] == 17.07
+    assert result["minimum_recharge"] == 200
 
 
 def test_already_suspended_connection(db_copy):
@@ -97,22 +98,44 @@ def test_only_one_request_at_a_time(db_copy):
 # ---------- resume_connection ----------
 
 def test_resume_unknown_subscriber(db_copy):
-    assert resume_connection("999999", db_path=db_copy) == {"ok": False, "reason": "unknown_subscriber"}
+    result = resume_connection("999999", True, db_path=db_copy)
+    assert result == {"ok": False, "reason": "unknown_subscriber"}
 
 
 def test_resume_active_connection(db_copy):
-    assert resume_connection("100003", db_path=db_copy) == {"ok": False, "reason": "not_suspended"}
+    result = resume_connection("100003", True, db_path=db_copy)
+    assert result == {"ok": False, "reason": "not_suspended"}
 
 
-def test_resume_with_low_balance(db_copy):
-    # 100005 is suspended with balance 0 and a monthly charge of 602
-    result = resume_connection("100005", db_path=db_copy)
-    assert result == {"ok": False, "reason": "insufficient_balance", "shortfall": 602}
+def test_resume_needs_the_set_top_box_on(db_copy):
+    run_sql(db_copy, "UPDATE connections SET balance = 25 WHERE subscriber_id = '100005'")
+    result = resume_connection("100005", False, db_path=db_copy)
+    assert result == {"ok": False, "reason": "set_top_box_must_be_on"}
 
 
-def test_resume_works_when_balance_is_enough(db_copy):
-    # make 100003 suspended; its balance 850 covers the monthly charge of 512
+def test_resume_with_balance_below_one_day(db_copy):
+    # 100005 pays 602 a month, so one day costs 20.07. Its balance is 0.
+    result = resume_connection("100005", True, db_path=db_copy)
+    assert result == {
+        "ok": False,
+        "reason": "insufficient_balance",
+        "daily_burn_rate": 20.07,
+        "balance": 0,
+        "minimum_recharge": 200,
+    }
+
+
+def test_resume_works_with_one_day_of_balance(db_copy):
+    # Balance 25 is far below the monthly charge of 602, but it covers one day (20.07).
+    run_sql(db_copy, "UPDATE connections SET balance = 25 WHERE subscriber_id = '100005'")
+    result = resume_connection("100005", True, db_path=db_copy)
+    assert result == {"ok": True, "status": "active"}
+    assert get_account("100005", db_path=db_copy)["status"] == "active"
+
+
+def test_resume_works_when_balance_is_plenty(db_copy):
+    # make 100003 suspended; its balance 850 covers everything
     run_sql(db_copy, "UPDATE connections SET status = 'suspended' WHERE subscriber_id = '100003'")
-    result = resume_connection("100003", db_path=db_copy)
+    result = resume_connection("100003", True, db_path=db_copy)
     assert result == {"ok": True, "status": "active"}
     assert get_account("100003", db_path=db_copy)["status"] == "active"
