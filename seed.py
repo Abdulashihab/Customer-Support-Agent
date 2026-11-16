@@ -43,7 +43,7 @@ def validate(data):
             errors.append(f"{p['pack_id']}: repeated channel number")
         # informational: is the pack cheaper than buying its channels one by one?
         total = sum(channels[n]["la_carte_price"] for n in p["channel_nos"] if n in channels)
-        if p["pack_id"] != BASE_PACK and p["price"] > total:
+        if p["pack_id"] != BASE_PACK and total > 0 and p["price"] > total:
             warnings.append(
                 f"{p['pack_id']}: pack costs {p['price']} but its channels cost "
                 f"{total} a la carte (pack is {p['price'] / total:.1f}x the a la carte total)"
@@ -113,6 +113,7 @@ def validate(data):
 
 
 SCHEMA = """
+DROP TABLE IF EXISTS suspension_requests;
 DROP TABLE IF EXISTS work_orders;
 DROP TABLE IF EXISTS connection_packs;
 DROP TABLE IF EXISTS pack_channels;
@@ -168,6 +169,15 @@ CREATE TABLE connection_packs (
     subscriber_id TEXT NOT NULL REFERENCES connections(subscriber_id),
     pack_id       TEXT NOT NULL REFERENCES packs(pack_id),
     PRIMARY KEY (subscriber_id, pack_id)
+);
+
+CREATE TABLE suspension_requests (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscriber_id TEXT NOT NULL REFERENCES connections(subscriber_id),
+    start_date    TEXT NOT NULL,               -- YYYY-MM-DD
+    end_date      TEXT NOT NULL,               -- YYYY-MM-DD
+    reason        TEXT NOT NULL,
+    status        TEXT NOT NULL CHECK (status IN ('scheduled','active','completed','cancelled'))
 );
 
 CREATE TABLE work_orders (
@@ -256,7 +266,7 @@ def main():
     db = build(data, db_path)
     counts = {
         t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-        for t in ("customers", "connections", "packs", "channels", "pack_channels", "work_orders")
+        for t in ("customers", "connections", "packs", "channels", "pack_channels", "work_orders", "suspension_requests")
     }
     db.close()
     print(f"Created {db_path}: " + ", ".join(f"{n} {t}" for t, n in counts.items()))
