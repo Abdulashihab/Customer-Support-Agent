@@ -1,4 +1,4 @@
-from src.tools.callback import request_callback
+from src.tools.request_callback import request_callback
 
 
 def test_callback_request_is_saved(db_copy):

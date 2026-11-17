@@ -1,4 +1,4 @@
-from src.tools.refresh import refresh_account
+from src.tools.refresh_account import refresh_account
 
 
 def test_normal_and_hard_refresh(db_copy):

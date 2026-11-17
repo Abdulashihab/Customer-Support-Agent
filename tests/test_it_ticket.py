@@ -1,4 +1,4 @@
-from src.tools.it_ticket import create_it_ticket
+from src.tools.create_it_ticket import create_it_ticket
 
 
 def test_ticket_is_created(db_copy):
