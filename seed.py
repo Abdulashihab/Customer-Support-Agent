@@ -113,6 +113,8 @@ def validate(data):
 
 
 SCHEMA = """
+DROP TABLE IF EXISTS it_tickets;
+DROP TABLE IF EXISTS callback_requests;
 DROP TABLE IF EXISTS suspension_requests;
 DROP TABLE IF EXISTS work_orders;
 DROP TABLE IF EXISTS connection_packs;
@@ -178,6 +180,22 @@ CREATE TABLE suspension_requests (
     end_date      TEXT NOT NULL,               -- YYYY-MM-DD
     reason        TEXT NOT NULL,
     status        TEXT NOT NULL CHECK (status IN ('scheduled','active','completed','cancelled'))
+);
+
+CREATE TABLE callback_requests (
+    request_id    TEXT PRIMARY KEY,            -- CB-1001, CB-1002, ...
+    subscriber_id TEXT NOT NULL REFERENCES connections(subscriber_id),
+    reason        TEXT NOT NULL,               -- why the customer needs a callback
+    summary       TEXT NOT NULL,               -- short summary for the supervisor
+    status        TEXT NOT NULL CHECK (status IN ('open','completed','cancelled'))
+);
+
+CREATE TABLE it_tickets (
+    ticket_id     TEXT PRIMARY KEY,            -- TKT-1001, TKT-1002, ...
+    subscriber_id TEXT NOT NULL REFERENCES connections(subscriber_id),
+    issue_type    TEXT NOT NULL,
+    details       TEXT NOT NULL,               -- what was tried, for the IT team
+    status        TEXT NOT NULL CHECK (status IN ('open','resolved','cancelled'))
 );
 
 CREATE TABLE work_orders (
@@ -266,7 +284,7 @@ def main():
     db = build(data, db_path)
     counts = {
         t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-        for t in ("customers", "connections", "packs", "channels", "pack_channels", "work_orders", "suspension_requests")
+        for t in ("customers", "connections", "packs", "channels", "pack_channels", "work_orders", "suspension_requests", "callback_requests", "it_tickets")
     }
     db.close()
     print(f"Created {db_path}: " + ", ".join(f"{n} {t}" for t, n in counts.items()))
