@@ -1,4 +1,4 @@
-from evaluation.conversation_eval import pack_ids, run_scenario, said
+from evaluation.conversation_eval import SCENARIOS, pack_ids, run_scenario, said
 from fake_ai import FakeClient, text_answer, tool_answer
 
 
@@ -41,3 +41,11 @@ def test_scenario_runs_on_a_copy_of_the_database(db_copy):
     ok, _ = run_scenario(scenario, client, "x", db_copy)
     assert ok is True                                      # the copy has the new pack
     assert "DSK-TLK1" not in pack_ids(db_copy, "100003")   # the original does not
+
+
+def test_every_scenario_is_complete_and_has_a_unique_name():
+    names = [scenario["name"] for scenario in SCENARIOS]
+    assert len(names) == len(set(names))
+    for scenario in SCENARIOS:
+        assert scenario["messages"]
+        assert callable(scenario["check"])
