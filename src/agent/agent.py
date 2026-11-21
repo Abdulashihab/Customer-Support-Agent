@@ -47,32 +47,25 @@ def _run_one_tool(subscriber_id, call, db_path, docs_search):
     return run_tool(subscriber_id, call.function.name, args, db_path=db_path)
 
 
-def chat_turn(subscriber_id, history, user_message, client=None, model=None,
-              db_path=None, docs_search=None):
+def run_agent_loop(subscriber_id, history, user_message, client=None, model=None,
+                   db_path=None, docs_search=None):
     """
-    One customer message in, one reply out.
+    The AI part: let the AI think and use tools, then return its reply.
 
     history is the list of earlier messages. This function adds the new ones to it.
     """
-    # Step 1: the guardrail goes first. Clear escalations never reach the AI.
-    escalation = handle_escalation(subscriber_id, user_message, db_path=db_path)
-    if escalation is not None:
-        history.append({"role": "user", "content": user_message})
-        history.append({"role": "assistant", "content": escalation["reply"]})
-        return escalation["reply"]
-
     if client is None:
         from src.agent.llm import get_client, get_model_name
 
         client, model = get_client(), get_model_name()
     docs_search = docs_search or _search_docs
 
-    # Step 2: build the conversation for the AI.
+    # Build the conversation for the AI.
     messages = [{"role": "system", "content": build_system_prompt(_get_today_text(db_path))}]
     messages += history
     messages.append({"role": "user", "content": user_message})
 
-    # Step 3: let the AI think and use tools, round by round.
+    # Let the AI think and use tools, round by round.
     for _ in range(MAX_STEPS):
         response = client.chat.completions.create(
             model=model, messages=messages, tools=TOOL_SCHEMAS
@@ -114,3 +107,16 @@ def chat_turn(subscriber_id, history, user_message, client=None, model=None,
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": reply})
     return reply
+
+
+def chat_turn(subscriber_id, history, user_message, client=None, model=None,
+              db_path=None, docs_search=None):
+    """One customer message in, one reply out: the guardrail first, then the AI."""
+    escalation = handle_escalation(subscriber_id, user_message, db_path=db_path)
+    if escalation is not None:
+        history.append({"role": "user", "content": user_message})
+        history.append({"role": "assistant", "content": escalation["reply"]})
+        return escalation["reply"]
+
+    return run_agent_loop(subscriber_id, history, user_message, client=client,
+                          model=model, db_path=db_path, docs_search=docs_search)
